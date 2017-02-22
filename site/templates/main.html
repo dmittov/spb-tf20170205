@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>What pokemon am I?</title>
+  </head>
+  <body>
+    <h1>What pokemon am I?</h1>
+    <p>Upload photo</p>
+    <main>
+      <form enctype="multipart/form-data" action="getpokemon" method="post" id="upload-form">
+        <input type="file" name="imagefile" id="imagefile"/>
+        <input type="submit" />
+      </form>
+    </main>
+  </body>
+</html>
