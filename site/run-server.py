@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, send_from_directory, redirect
+from flask import Flask, render_template, request, redirect
 
 import os
 import numpy as np
@@ -21,11 +21,13 @@ app.config['pokesFolder'] = 'static/img/pokes/'
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
 
 
+# if file has right extension
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+# get square part of photo
 def resizePhoto(img):
     shape = list(img.shape)
     if shape[0] < shape[1]:
@@ -39,6 +41,7 @@ def resizePhoto(img):
     return img
 
 
+# make image smaller if it is too big
 def maybeMakeSmaller(img):
     shape = list(img.shape)
     if shape[0] > 370:
@@ -51,7 +54,13 @@ def maybeMakeSmaller(img):
         skimage.io.imsave(app.config['facesFolder'] + str(id) + '.jpg', img)
 
 
+# global variable for counting how much photos has already been processed
 id = 0
+
+
+def initId():
+    global id
+    id = len(os.listdir("static/img/faces"))
 
 
 def getId():
@@ -60,30 +69,23 @@ def getId():
     return id
 
 
-def initId():
-    global id
-    id = len(os.listdir("static/img/faces"))
-    # path, dirs, files = os.walk("static/img/faces").next()
-    # id = len(files)
-
-
+# main page
 @app.route('/pokemon')
 def main():
-    print("it is simple main page")
     return render_template("main.html")
 
 
+# GET request to get image pair that has already been processed
 @app.route('/getpokemon', methods=['GET'])
 def redirectToMain():
     if "id" not in request.args:
         return redirect("http://olimp-union/pokemon", code=302)
     id = request.args.get('id')
     ctx_params = {'id': id}
-    return render_template(
-        "getpokemon.html",
-        **ctx_params)
+    return render_template("getpokemon.html", **ctx_params)
 
 
+# POST request with user's photo
 @app.route('/getpokemon', methods=['POST'])
 def getPokemon():
     if 'imagefile' not in request.files:
@@ -91,13 +93,13 @@ def getPokemon():
     file = request.files['imagefile']
     if file.filename == '':
         return 'No selected file'
-    if not allowed_file(file.filename):
+    if not allowed_file(file.filename):  # check extension
         return "Wrong file format. Please, try another file http://olimp-union.com/pokemon"
     id = getId()
     file.save(os.path.join(app.config['facesFolder'], str(id) + ".jpg"))
 
     faces = list()
-    img = skimage.io.imread(app.config['facesFolder'] + str(id) + '.jpg')  # load image from file
+    img = skimage.io.imread(app.config['facesFolder'] + str(id) + '.jpg')  # load image
     maybeMakeSmaller(img)
     img = resizePhoto(img)
     img = skimage.color.rgb2gray(img)  # make it gray
@@ -105,11 +107,11 @@ def getPokemon():
     faces.append(img)
     data = np.array(faces).astype(np.float64)
     data = preprocess_input(data)  # classify an image
-    faces_len = 1
-    prediction_faces = resnet.predict(data).reshape(faces_len, 2048)
+    prediction_faces = resnet.predict(data).reshape(1, 2048)
 
     print("Count distances...")
-    distances = np.zeros((faces_len, poke_len))
+    #  count all distances between face and pokemons
+    distances = np.zeros((1, poke_len))
     for face_idx, face in enumerate(prediction_faces):  # this is 1 face
         for poke_idx, poke in enumerate(prediction_poke):
             distances[face_idx, poke_idx] = np.dot(face, poke) / sla.norm(poke) / sla.norm(face)
@@ -118,15 +120,17 @@ def getPokemon():
     idx = 0
     priority = np.argsort(distances[idx])[::-1]  # sort distances
     for i, p in enumerate(priority):
-        poke_idx = p
+        poke_idx = p  # get closest pair
         break
     image_pairs.append((idx, poke_idx))
 
     poke_idx = image_pairs[0][1]
+    # save closest image of poke:
     skimage.io.imsave(app.config['pokesFolder'] + str(id) + ".png", origin_pokemons[poke_idx])
     return redirect("http://olimp-union.com/getpokemon?id=" + str(id), code=302)
 
 
+# init
 if __name__ == '__main__':
     input_tensor = Input(shape=(224, 224, 3))
     resnet = ResNet50(include_top=False, weights='imagenet', input_tensor=input_tensor)
@@ -139,7 +143,7 @@ if __name__ == '__main__':
     origin_pokemons = list()
     dir_ = 'pokefaces'
     i = 0
-    for path in os.listdir(dir_):
+    for path in os.listdir(dir_):  # resize images and make it gray
         i = i + 1
         path = os.path.join(dir_, path)
         if '.png' not in path:
@@ -157,7 +161,6 @@ if __name__ == '__main__':
     data = preprocess_input(data)
     poke_len = len(data)
     print("Resnet is making predictions. It may take few minutes...")
-    prediction_poke = resnet.predict(data).reshape(poke_len, 2048)
+    prediction_poke = resnet.predict(data).reshape(poke_len, 2048)  # make predictions
 
-    # np.random.shuffle(image_pairs)
     app.run()
